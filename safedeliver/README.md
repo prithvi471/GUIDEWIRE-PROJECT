@@ -41,6 +41,7 @@ npm run dev
 ```
 
 ### AI Setup
+Requires **Python 3.11.9** to match the native Scikit-Learn binaries:
 ```bash
 cd aip
 python -m venv venv
