@@ -6,7 +6,7 @@ import {
   Wallet, TrendingUp, Calendar, Zap, AlertOctagon, History, FileText, Check
 } from 'lucide-react';
 
-const API_BASE = 'http://localhost:5001';
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5001';
 
 function App() {
   const [view, setView] = useState('register'); // 'register' or 'dashboard'

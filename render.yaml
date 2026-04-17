@@ -1,0 +1,29 @@
+services:
+  # Node.js Backend Service
+  - type: web
+    name: safedeliver-backend
+    env: node
+    rootDir: safedeliver/backend
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: NODE_ENV
+        value: production
+      - key: AI_SERVICE_URL
+        fromService:
+          type: web
+          name: safedeliver-ai
+          property: host
+
+  # Python AI Service
+  - type: web
+    name: safedeliver-ai
+    env: python
+    rootDir: safedeliver/ai
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
