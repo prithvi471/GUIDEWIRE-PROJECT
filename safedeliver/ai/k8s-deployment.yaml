@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: incurion-ai-engine
+  labels:
+    app: incurion-ai
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: incurion-ai
+  template:
+    metadata:
+      labels:
+        app: incurion-ai
+    spec:
+      containers:
+      - name: ai-engine
+        image: <your-docker-registry>/incurion-ai-engine:latest
+        ports:
+        - containerPort: 8000
+        env:
+        - name: PORT
+          value: "8000"
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: incurion-ai-service
+spec:
+  selector:
+    app: incurion-ai
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8000
+  type: LoadBalancer
