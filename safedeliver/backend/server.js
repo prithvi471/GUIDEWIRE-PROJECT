@@ -42,8 +42,8 @@ async function sendNotification(phone, type, amount=0) {
     return true; 
 }
 
-async function processMockPayout(amount) {
-    console.log(`💸 Processing ₹${amount} Payout via Razorpay Simulation...`);
+async function processMockPayout(amount, payoutAccount) {
+    console.log(`💸 Processing ₹${amount} Payout via Razorpay Simulation to ${payoutAccount || 'unknown UPI'}...`);
     await new Promise(r => setTimeout(r, 800)); // Simulate API latency
     const txId = `pay_mock_${Date.now()}`;
     console.log(`✅ SUCCESS: ₹${amount} credited instantly. [Tx: ${txId}]`);
@@ -180,7 +180,7 @@ async function fetchSignals(city) {
 // --------------------------------------------------------------------------
 
 app.post('/register', (req, res) => {
-    const { name, city, weekly_income, loan, claims } = req.body;
+    const { name, city, weekly_income, loan, claims, payoutAccount } = req.body;
     const userId = Date.now().toString();
 
     inMemoryDB.users[userId] = {
@@ -188,6 +188,7 @@ app.post('/register', (req, res) => {
         name,
         city,
         weekly_income: parseFloat(weekly_income),
+        payoutAccount: payoutAccount || "",
         loan: loan ? 1 : 0,
         claims: parseInt(claims) || 0,
         wallet_balance: 0,
@@ -405,7 +406,7 @@ app.post('/claim', async (req, res) => {
         if (user) await sendNotification(user.phone || '+919876543210', 'TRIGGER_DETECTED');
         if (user) await sendNotification(user.phone || '+919876543210', 'CLAIM_APPROVED');
         
-        const payoutTx = await processMockPayout(payout);
+        const payoutTx = await processMockPayout(payout, user ? user.payoutAccount : "");
         
         if (user) await sendNotification(user.phone || '+919876543210', 'PAYOUT_SUCCESS', payout);
         console.log(`--- ✅ PIPELINE COMPLETE ---\n`);

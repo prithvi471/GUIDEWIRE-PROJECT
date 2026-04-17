@@ -12,7 +12,7 @@ function App() {
   const [view, setView] = useState('register'); // 'register' or 'dashboard'
   const [userId, setUserId] = useState(null);
 
-  const [form, setForm] = useState({ name: "", city: "", income: "", loan: false, claims: 0 });
+  const [form, setForm] = useState({ name: "", city: "", income: "", payoutAccount: "", loan: false, claims: 0 });
   
   const [dashboard, setDashboard] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -129,7 +129,12 @@ function App() {
              try {
                 setLoading(true);
                 const regRes = await axios.post(`${API_BASE}/register`, {
-                  name: form.name, city: form.city, weekly_income: Number(form.income), loan: form.loan, claims: Number(form.claims)
+                  name: form.name, 
+                  city: form.city, 
+                  weekly_income: Number(form.income), 
+                  payoutAccount: form.payoutAccount,
+                  loan: form.loan, 
+                  claims: Number(form.claims)
                 });
                 const newUserId = regRes.data.id;
                 setUserId(newUserId);
@@ -311,9 +316,16 @@ function App() {
             </div>
           </div>
 
+          <div>
+            <label className="text-xs font-bold text-gray-500 uppercase tracking-widest pl-1">Link Payout Account (UPI ID)</label>
+            <div className="relative mt-1">
+              <input type="text" name="payoutAccount" value={form.payoutAccount} onChange={handleChange} required placeholder="user@upi" className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none font-medium" />
+            </div>
+          </div>
+
           <button type="button" onClick={(e) => {
-            if (!form.name || !form.city || !form.income) {
-               setError("Please fill all required fields.");
+            if (!form.name || !form.city || !form.income || !form.payoutAccount) {
+               setError("Please fill all required fields, including Payout Account.");
                return;
             }
             handleStartSubscription(e);
