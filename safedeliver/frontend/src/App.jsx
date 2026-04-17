@@ -24,6 +24,13 @@ function App() {
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [locLoading, setLocLoading] = useState(false);
 
+  useEffect(() => {
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.async = true;
+    document.body.appendChild(script);
+  }, []);
+
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
     setForm(prev => ({
@@ -91,27 +98,70 @@ function App() {
 
   const handleToggle = () => setForm(prev => ({ ...prev, loan: !prev.loan }));
 
-  // Flow: Register -> Calculate Policy -> Load Dashboard
+  // Flow: Razorpay Checkout -> Register -> Calculate Policy -> Load Dashboard
   const handleStartSubscription = async (e) => {
     if (e) e.preventDefault();
     setLoading(true);
     setError("");
 
     try {
-      const regRes = await axios.post(`${API_BASE}/register`, {
-        name: form.name, city: form.city, weekly_income: Number(form.income), loan: form.loan, claims: Number(form.claims)
+      let policyCost = 500; // fallback default premium
+      if (previewPolicy) {
+          policyCost = previewPolicy.premium;
+      } else {
+          const calcRes = await axios.post(`${API_BASE}/calculate`, { 
+              preview: { city: form.city, income: form.income, loan: form.loan, claims: form.claims }
+          });
+          policyCost = calcRes.data.premium;
+      }
+
+      const orderRes = await axios.post(`${API_BASE}/payment/order`, { amount: policyCost });
+      const order = orderRes.data;
+
+      const options = {
+          key: "rzp_test_SeXFAL2hAq3CDh",
+          amount: order.amount,
+          currency: order.currency,
+          name: "SafeDeliver Premium",
+          description: "Weekly Income Protection",
+          order_id: order.id,
+          handler: async function (response) {
+             try {
+                setLoading(true);
+                const regRes = await axios.post(`${API_BASE}/register`, {
+                  name: form.name, city: form.city, weekly_income: Number(form.income), loan: form.loan, claims: Number(form.claims)
+                });
+                const newUserId = regRes.data.id;
+                setUserId(newUserId);
+
+                await axios.post(`${API_BASE}/calculate`, { userId: newUserId });
+                await axios.post(`${API_BASE}/add-money`, { userId: newUserId, amount: policyCost });
+
+                await refreshDashboard(newUserId);
+                setView('dashboard');
+             } catch (err) {
+                setError("Registration failed post-payment");
+             } finally {
+                setLoading(false);
+             }
+          },
+          prefill: {
+              name: form.name,
+              contact: "9999999999"
+          },
+          theme: { color: "#4f46e5" }
+      };
+
+      const rzpPopup = new window.Razorpay(options);
+      rzpPopup.on('payment.failed', function (response){
+          setLoading(false);
+          setError(response.error.description);
       });
-      const newUserId = regRes.data.id;
-      setUserId(newUserId);
+      rzpPopup.open();
 
-      await axios.post(`${API_BASE}/calculate`, { userId: newUserId });
-
-      await refreshDashboard(newUserId);
-      setView('dashboard');
     } catch (err) {
-      setError(err.response?.data?.error || "Connection refused. Please ensure Backend is running on Port 5001.");
-    } finally {
       setLoading(false);
+      setError(err.response?.data?.error || "Payment initiation failed.");
     }
   };
 

@@ -3,16 +3,53 @@ const cors = require('cors');
 const axios = require('axios');
 const dotenv = require('dotenv');
 
+// --- NEW DEMO INTEGRATIONS ---
+const Razorpay = require('razorpay');
+const twilio = require('twilio');
+const mongoose = require('mongoose');
+// -----------------------------
+
 dotenv.config();
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000';
+const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://127.0.0.1:8000';
 const WEATHER_API_KEY = process.env.WEATHER_API_KEY;
 const SERP_API_KEY = process.env.SERP_API_KEY;
 const PORT = process.env.PORT || 5001;
+
+// --- TWILIO & RAZORPAY SETUP ---
+const rzp = new Razorpay({
+  key_id: process.env.RAZORPAY_KEY_ID || 'rzp_test_SeXFAL2hAq3CDh',
+  key_secret: process.env.RAZORPAY_SECRET || 'fF26hH3mOCKr3L2qcfkTQZDb',
+});
+
+const twilioClient = twilio(
+    process.env.TWILIO_ACCOUNT_SID || "ACmock12345", 
+    process.env.TWILIO_AUTH_TOKEN || "mock_token"
+);
+
+async function sendNotification(phone, type, amount=0) {
+    let body = "";
+    if (type === 'TRIGGER_DETECTED') body = "🌧 Rain detected in your micro-zone. You're protected. Stand by.";
+    if (type === 'CLAIM_APPROVED') body = "⚡ Claim approved by AI Engine. Processing instant payout...";
+    if (type === 'PAYOUT_SUCCESS') body = `💸 ₹${amount} credited instantly to your registered account. Drive safe!`;
+    if (type === 'FRAUD') body = "🚨 Suspicious activity detected on your device. Claim withheld. Please contact support.";
+    
+    console.log(`\n📱 [SMS to ${phone || '+919876543210'}]: ${body}\n`);
+    return true; 
+}
+
+async function processMockPayout(amount) {
+    console.log(`💸 Processing ₹${amount} Payout via Razorpay Simulation...`);
+    await new Promise(r => setTimeout(r, 800)); // Simulate API latency
+    const txId = `pay_mock_${Date.now()}`;
+    console.log(`✅ SUCCESS: ₹${amount} credited instantly. [Tx: ${txId}]`);
+    return txId;
+}
+// -------------------------------
 
 // Database Simulation Array
 const inMemoryDB = {
@@ -185,8 +222,28 @@ app.post('/calculate', async (req, res) => {
             location_risk
         };
 
-        const aiResponse = await axios.post(`${AI_SERVICE_URL}/predict`, aiPayload);
-        const risk_probability = aiResponse.data.risk_probability;
+        let risk_probability;
+        try {
+            const aiResponse = await axios.post(`${AI_SERVICE_URL}/predict`, aiPayload, { timeout: 5000 });
+            risk_probability = aiResponse.data.risk_probability;
+            console.log("AI Service responded with risk_probability:", risk_probability);
+        } catch (aiError) {
+            // AI service is likely not running — use a rule-based fallback
+            console.warn("⚠️  AI Service unreachable at", AI_SERVICE_URL);
+            console.warn("   Reason:", aiError.message);
+            console.warn("   Falling back to rule-based risk calculation.");
+
+            // Deterministic fallback: mirrors the training logic in train.py
+            const weatherRisk = aiPayload.weather >= 2 ? aiPayload.weather * 0.05 : 0;
+            const disruptionRisk = aiPayload.disruption * 0.35;
+            const claimsRisk = aiPayload.claims * 0.08;
+            const locationRisk = aiPayload.location_risk * 0.05;
+            const loanRisk = aiPayload.loan * 0.05;
+            risk_probability = Math.min(0.99, Math.max(0.01,
+                weatherRisk + disruptionRisk + claimsRisk + locationRisk + loanRisk
+            ));
+            console.log("   Fallback risk_probability:", risk_probability.toFixed(4));
+        }
 
         // -------------------------------------------------------------
         // ML PREMIUM CALCULATION LOGIC
@@ -213,8 +270,11 @@ app.post('/calculate', async (req, res) => {
         res.json(user.policy);
 
     } catch (error) {
-        console.error("Calculate Error:", error.message);
-        res.status(500).json({ error: 'AI Error or Internal Issue' });
+        console.error("❌ Calculate Error:", error.message);
+        if (error.response) {
+            console.error("   Response data:", error.response.data);
+        }
+        res.status(500).json({ error: 'Internal Server Error', detail: error.message });
     }
 });
 
@@ -339,6 +399,18 @@ app.post('/claim', async (req, res) => {
         claim_status = "Approved";
         payout = parseFloat(targetIncome) * 0.5;
         reason = "Auto-validated claim triggered due to detected disruption";
+        
+        // --- TRIGGER DEMO FINTECH INTEGRATIONS DYNAMICALLY ---
+        console.log(`\n--- ⚡ INITIATING ZERO-TOUCH CLAIM PIPELINE ---`);
+        if (user) await sendNotification(user.phone || '+919876543210', 'TRIGGER_DETECTED');
+        if (user) await sendNotification(user.phone || '+919876543210', 'CLAIM_APPROVED');
+        
+        const payoutTx = await processMockPayout(payout);
+        
+        if (user) await sendNotification(user.phone || '+919876543210', 'PAYOUT_SUCCESS', payout);
+        console.log(`--- ✅ PIPELINE COMPLETE ---\n`);
+        // -----------------------------------------------------
+
     } else {
         claim_status = "Rejected";
         payout = 0;
@@ -366,6 +438,21 @@ app.post('/claim', async (req, res) => {
         weather: weatherStr,
         disruption
     });
+});
+
+app.post('/payment/order', async (req, res) => {
+    try {
+        const { amount } = req.body;
+        const order = await rzp.orders.create({
+            amount: Math.round(amount * 100),
+            currency: "INR",
+            receipt: `receipt_${Date.now()}`
+        });
+        res.json(order);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: err.message });
+    }
 });
 
 app.listen(PORT, () => {
